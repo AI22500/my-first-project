@@ -15,6 +15,19 @@ st.set_page_config(page_title=PAGE_TITLE, page_icon=PAGE_ICON)
 st.title(f"{PAGE_ICON} {PAGE_TITLE}")
 st.write("やることを追加して、完了チェックで管理できます。")
 
+def get_todos():
+    res = supabase.table("todos").select("*").order("created_at").execute()
+    return res.data
+
+def add_todo(task):
+    supabase.table("todos").insert({"task": task}).execute()
+
+def toggle_done(todo_id, done):
+    supabase.table("todos").update({"done": done}).eq("id", todo_id).execute()
+
+def delete_done():
+    supabase.table("todos").delete().eq("done", True).execute()
+
 
 def init_state() -> None:
     if "todos" not in st.session_state:
