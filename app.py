@@ -1,24 +1,95 @@
 import streamlit as st
-import pickle
-import numpy as np
 
-# 1. 保存した「秘伝のタレ（モデル）」を読み込む
-with open('model.pkl', 'rb') as f:
-    model = pickle.load(f)
+PAGE_TITLE = "Todoリスト"
+PAGE_ICON = "📝"
 
-# 2. 画面のタイトルを書く
-st.title("AI住宅価格予測アプリ")
-st.write("部屋の数を入力すると、カリフォルニアの住宅価格を予測します。")
+st.set_page_config(page_title=PAGE_TITLE, page_icon=PAGE_ICON)
 
-# 3. 入力フォーム（スライダー）を作る
-# 1部屋から10部屋まで選べるようにします
-rooms = st.slider("部屋の数（AveRooms）を選んでください", 1.0, 10.0, 5.0)
+st.title(f"{PAGE_ICON} {PAGE_TITLE}")
+st.write("やることを追加して、完了チェックで管理できます。")
 
-# 4. ボタンを押したら予測を実行する
-if st.button("価格を予測する"):
-    # AIに渡す形（2次元配列）に整える
-    input_data = np.array([[rooms]])
-    prediction = model.predict(input_data)
-    
-    # 結果を表示
-    st.success(f"予測価格は {prediction[0]:.2f} (10万ドル単位) です！")
+
+def init_state() -> None:
+    if "todos" not in st.session_state:
+        st.session_state.todos = []
+    if "next_id" not in st.session_state:
+        st.session_state.next_id = 1
+    if "all_done_notified" not in st.session_state:
+        st.session_state.all_done_notified = False
+
+
+def add_todo(task_text: str) -> bool:
+    normalized = task_text.strip()
+    if not normalized:
+        return False
+
+    duplicated = any(todo["task"] == normalized for todo in st.session_state.todos)
+    if duplicated:
+        st.info("同じ名前のタスクがすでにあります。")
+        return False
+
+    st.session_state.todos.append(
+        {"id": st.session_state.next_id, "task": normalized, "done": False}
+    )
+    st.session_state.next_id += 1
+    return True
+
+
+def remove_completed() -> None:
+    st.session_state.todos = [todo for todo in st.session_state.todos if not todo["done"]]
+    st.session_state.all_done_notified = False
+
+
+def clear_all() -> None:
+    st.session_state.todos = []
+    st.session_state.all_done_notified = False
+
+
+init_state()
+
+with st.form("add_todo_form", clear_on_submit=True):
+    new_todo = st.text_input("新しいタスク", placeholder="例: 牛乳を買う")
+    submitted = st.form_submit_button("追加")
+
+if submitted:
+    if add_todo(new_todo):
+        st.success(f"「{new_todo.strip()}」を追加しました")
+    elif not new_todo.strip():
+        st.warning("タスク名を入力してください")
+
+if st.session_state.todos:
+    st.subheader("タスク一覧")
+
+    for i, todo in enumerate(st.session_state.todos):
+        checked = st.checkbox(todo["task"], value=todo["done"], key=f"todo_{todo['id']}")
+        st.session_state.todos[i]["done"] = checked
+
+    completed = sum(todo["done"] for todo in st.session_state.todos)
+    total = len(st.session_state.todos)
+    progress = completed / total
+    st.progress(progress, text=f"進捗: {completed}/{total} 完了")
+
+    pending = total - completed
+    st.caption(f"未完了タスク: {pending}件")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        remove_clicked = st.button("完了済みを削除", use_container_width=True)
+    with col2:
+        clear_clicked = st.button("すべて削除", use_container_width=True)
+
+    if remove_clicked:
+        remove_completed()
+        st.rerun()
+    if clear_clicked:
+        clear_all()
+        st.rerun()
+
+    all_done = completed == total
+    if all_done and not st.session_state.all_done_notified:
+        st.balloons()
+        st.session_state.all_done_notified = True
+    elif not all_done:
+        st.session_state.all_done_notified = False
+else:
+    st.info("まだタスクがありません。上のフォームから追加しましょう。")
