@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Plus, Check, Trash2, Edit2, Calendar, Flag, Tag, Search, Moon, Sun,
+  Plus, Check, Trash2, Edit2, Calendar, Flag, Tag, Filter, Search, Moon, Sun,
   ChevronRight, ChevronDown, MoreVertical, Settings, X
 } from 'lucide-react';
 
@@ -15,7 +15,8 @@ const translations = {
     highPriority: 'High Priority', addTask: 'Add Task', edit: 'Edit', delete: 'Delete', subtasks: 'subtasks',
     work: 'Work', personal: 'Personal', health: 'Health', learning: 'Learning', settings: 'Settings',
     language: 'Language', theme: 'Theme', darkMode: 'Dark Mode', lightMode: 'Light Mode', close: 'Close',
-    activeOnly: 'Active', due: 'Due', overdue: 'Overdue', addSubtask: 'Add subtask'
+    activeOnly: 'Active', due: 'Due', overdue: 'Overdue', addSubtask: 'Add subtask',
+    filters: 'Filters', save: 'Save'
   },
   ja: {
     appName: 'Flow', total: '合計', active: '進行中', done: '完了', priority: '優先',
@@ -25,7 +26,8 @@ const translations = {
     highPriority: '高優先度', addTask: 'タスクを追加', edit: '編集', delete: '削除', subtasks: 'サブタスク',
     work: '仕事', personal: '個人', health: '健康', learning: '学習', settings: '設定',
     language: '言語', theme: 'テーマ', darkMode: 'ダークモード', lightMode: 'ライトモード', close: '閉じる',
-    activeOnly: '進行中', due: '期限', overdue: '期限切れ', addSubtask: 'サブタスクを追加'
+    activeOnly: '進行中', due: '期限', overdue: '期限切れ', addSubtask: 'サブタスクを追加',
+    filters: 'フィルター', save: '保存'
   }
 };
 
@@ -45,7 +47,8 @@ const categoryColors = { Work: '#5e60ce', Personal: '#48cae4', Health: '#06d6a0'
 const storageApi = window.storage ?? {
   async get(key) { const value = localStorage.getItem(key); return value === null ? null : { value }; },
   async set(key, value) { localStorage.setItem(key, value); },
-  async delete(key) { localStorage.removeItem(key); }
+  async delete(key) { localStorage.removeItem(key); },
+  async list() { return Object.keys(localStorage).map((key) => ({ key })); }
 };
 
 const getPriorityName = (priority, language) => ({ high: language === 'ja' ? '高' : 'High', medium: language === 'ja' ? '中' : 'Med', low: language === 'ja' ? '低' : 'Low' }[priority] ?? priority);
@@ -88,6 +91,7 @@ export default function App() {
   const [showMenu, setShowMenu] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
   const [language, setLanguage] = useState('en');
+  const [subtaskDrafts, setSubtaskDrafts] = useState({});
   const [loading, setLoading] = useState(true);
 
   const t = translations[language];
@@ -150,9 +154,10 @@ export default function App() {
   const updateTask = (id, patch) => setTasks((prev) => prev.map((task) => task.id === id ? { ...task, ...patch } : task));
   const deleteTask = (id) => setTasks((prev) => prev.filter((task) => task.id !== id));
   const addSubtask = (id) => {
-    const text = prompt(t.addSubtask);
-    if (!text?.trim()) return;
-    setTasks((prev) => prev.map((task) => task.id === id ? { ...task, subtasks: [...task.subtasks, { id: Date.now(), text: text.trim(), completed: false }] } : task));
+    const subtaskText = subtaskDrafts[id]?.trim();
+    if (!subtaskText) return;
+    setTasks((prev) => prev.map((task) => task.id === id ? { ...task, subtasks: [...task.subtasks, { id: Date.now(), text: subtaskText, completed: false }] } : task));
+    setSubtaskDrafts((prev) => ({ ...prev, [id]: '' }));
   };
   const toggleSubtask = (taskId, subtaskId) => setTasks((prev) => prev.map((task) => task.id === taskId ? { ...task, subtasks: task.subtasks.map((subtask) => subtask.id === subtaskId ? { ...subtask, completed: !subtask.completed } : subtask) } : task));
 
@@ -175,6 +180,7 @@ export default function App() {
 
       <section className="search-filter">
         <div className="search-box"><Search size={16} /><input value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder={t.searchPlaceholder} /></div>
+        <p className="filter-label"><Filter size={14} /> {t.filters}</p>
         <div className="filter-row">
           {['all', 'active', 'completed'].map((status) => <button key={status} className={filterStatus === status ? 'chip active' : 'chip'} onClick={() => setFilterStatus(status)}>{status === 'all' ? t.all : status === 'active' ? t.activeOnly : t.completed}</button>)}
         </div>
@@ -204,7 +210,15 @@ export default function App() {
                 {expandedTask === task.id && (
                   <div className="subtasks">
                     {task.subtasks.map((subtask) => <label key={subtask.id}><input type="checkbox" checked={subtask.completed} onChange={() => toggleSubtask(task.id, subtask.id)} /> <span className={subtask.completed ? 'done' : ''}>{subtask.text}</span></label>)}
-                    <button className="link-btn" onClick={() => addSubtask(task.id)}><Plus size={12} /> {t.addSubtask}</button>
+                    <div className="subtask-form">
+                      <input
+                        value={subtaskDrafts[task.id] ?? ''}
+                        onChange={(event) => setSubtaskDrafts((prev) => ({ ...prev, [task.id]: event.target.value }))}
+                        placeholder={t.addSubtask}
+                        onKeyDown={(event) => event.key === 'Enter' && addSubtask(task.id)}
+                      />
+                      <button className="link-btn" onClick={() => addSubtask(task.id)}><Plus size={12} /> {t.save}</button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -222,7 +236,7 @@ export default function App() {
       {showAddTask && (
         <div className="sheet-overlay" onClick={() => setShowAddTask(false)}>
           <section className="sheet" onClick={(e) => e.stopPropagation()}>
-            <h3>{t.newTask}</h3>
+            <div className="sheet-head"><h3>{t.newTask}</h3><button className="icon-btn" onClick={() => setShowAddTask(false)} aria-label={t.close}><X size={16} /></button></div>
             <input value={newTask} onChange={(e) => setNewTask(e.target.value)} placeholder={t.whatToDo} onKeyDown={(e) => e.key === 'Enter' && addTask()} />
             <select value={selectedCategory} onChange={(e) => setSelectedCategory(e.target.value)}>
               <option value="">{t.work}</option>{categories.map((category) => <option key={category} value={category}>{t[category.toLowerCase()]}</option>)}
@@ -239,7 +253,7 @@ export default function App() {
       {showSettings && (
         <div className="sheet-overlay" onClick={() => setShowSettings(false)}>
           <section className="sheet" onClick={(e) => e.stopPropagation()}>
-            <div className="sheet-head"><h3>{t.settings}</h3><button className="icon-btn" onClick={() => setShowSettings(false)}><X size={16} /></button></div>
+            <div className="sheet-head"><h3>{t.settings}</h3><button className="icon-btn" onClick={() => setShowSettings(false)} aria-label={t.close}><X size={16} /></button></div>
             <p>{t.language}</p>
             <div className="setting-grid"><button className={language === 'en' ? 'chip active' : 'chip'} onClick={() => setLanguage('en')}>🇺🇸 English</button><button className={language === 'ja' ? 'chip active' : 'chip'} onClick={() => setLanguage('ja')}>🇯🇵 日本語</button></div>
             <p>{t.theme}</p>
