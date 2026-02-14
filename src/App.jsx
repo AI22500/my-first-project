@@ -49,7 +49,26 @@ const storageApi = window.storage ?? {
 };
 
 const getPriorityName = (priority, language) => ({ high: language === 'ja' ? '高' : 'High', medium: language === 'ja' ? '中' : 'Med', low: language === 'ja' ? '低' : 'Low' }[priority] ?? priority);
-const isOverdue = (dueDate) => dueDate && new Date(dueDate) < new Date() && new Date(dueDate).toDateString() !== new Date().toDateString();
+const parseLocalDate = (dateString) => {
+  if (!dateString) return null;
+
+  const localDateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateString);
+  if (localDateMatch) {
+    const [, year, month, day] = localDateMatch;
+    return new Date(Number(year), Number(month) - 1, Number(day));
+  }
+
+  const parsedDate = new Date(dateString);
+  return Number.isNaN(parsedDate.getTime()) ? null : parsedDate;
+};
+
+const isOverdue = (dueDate) => {
+  const parsedDueDate = parseLocalDate(dueDate);
+  if (!parsedDueDate) return false;
+
+  const now = new Date();
+  return parsedDueDate < now && parsedDueDate.toDateString() !== now.toDateString();
+};
 
 export default function App() {
   const [tasks, setTasks] = useState([]);
@@ -176,7 +195,7 @@ export default function App() {
                 {editingId === task.id ? <input value={editingText} onChange={(e) => setEditingText(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && (updateTask(task.id, { text: editingText.trim() || task.text }), setEditingId(null))} /> : <p className={task.completed ? 'done' : ''}>{task.text}</p>}
                 <div className="badges">
                   <span className="badge" style={{ color: categoryColors[task.category] }}><Tag size={13} /> {t[task.category.toLowerCase()]}</span>
-                  {task.dueDate && <span className="badge" style={{ color: overdue ? theme.priority.high : theme.textSecondary }}><Calendar size={13} /> {overdue ? t.overdue : t.due} {new Date(task.dueDate).toLocaleDateString(language)}</span>}
+                  {task.dueDate && <span className="badge" style={{ color: overdue ? theme.priority.high : theme.textSecondary }}><Calendar size={13} /> {overdue ? t.overdue : t.due} {parseLocalDate(task.dueDate)?.toLocaleDateString(language) ?? task.dueDate}</span>}
                   <span className="badge"><Flag size={13} /> {getPriorityName(task.priority, language)}</span>
                 </div>
                 <button className="subtask-toggle" onClick={() => setExpandedTask(expandedTask === task.id ? null : task.id)}>
